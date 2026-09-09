@@ -1,9 +1,11 @@
 import uuid
+from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.expenses.models import Expense
+from app.expenses.recurrence import RecurrenceFrequency, next_due_date
 from app.expenses.schemas import ExpenseCreate, ExpenseUpdate
 
 
@@ -75,3 +77,38 @@ class ExpenseRepository:
         expense = self._get(expense_id)
         self.db.delete(expense)
         self.db.commit()
+
+    def mark_as_paid(self, expense_id: uuid.UUID, paid_at: datetime) -> Expense:
+        expense = self._get(expense_id)
+        expense.paid_at = paid_at
+        self.db.commit()
+
+        if expense.is_recurring and expense.recurrence_frequency:
+            next_date = next_due_date(
+                expense.due_date,
+                RecurrenceFrequency(expense.recurrence_frequency),
+                expense.recurrence_interval,
+                expense.recurrence_end_date,
+            )
+            if next_date is not None:
+                occurrence = Expense(
+                    id=uuid.uuid4(),
+                    description=expense.description,
+                    amount=expense.amount,
+                    due_date=next_date,
+                    is_recurring=expense.is_recurring,
+                    recurrence_frequency=expense.recurrence_frequency,
+                    recurrence_interval=expense.recurrence_interval,
+                    recurrence_end_date=expense.recurrence_end_date,
+                )
+                self.db.add(occurrence)
+                self.db.commit()
+
+        return expense
+
+    def reverse_payment(self, expense_id: uuid.UUID) -> Expense:
+        expense = self._get(expense_id)
+        expense.paid_at = None
+        self.db.commit()
+        self.db.refresh(expense)
+        return expense
