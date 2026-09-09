@@ -14,7 +14,7 @@ def db_session():
         poolclass=StaticPool,
     )
     Base.metadata.create_all(engine)
-    TestingSessionLocal = sessionmaker(bind=engine)
+    TestingSessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
     session = TestingSessionLocal()
     try:
         yield session
