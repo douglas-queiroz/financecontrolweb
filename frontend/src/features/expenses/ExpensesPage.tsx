@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Fab } from '../../components/Fab'
+import { Tabs } from '../../components/Tabs'
 import { PaidExpensesList } from './PaidList/PaidExpensesList'
 import { UnpaidExpensesList } from './UnpaidList/UnpaidExpensesList'
 
@@ -9,25 +10,24 @@ export function ExpensesPage() {
   const [tab, setTab] = useState<Tab>('unpaid')
 
   return (
-    <div>
-      <header className="flex items-center justify-between p-4">
-        <h1 className="text-2xl font-bold">Financial Control</h1>
-        <Link to="/expenses/new" className="bg-blue-600 text-white px-3 py-1 rounded">
-          + New
-        </Link>
+    <div className="min-h-screen bg-surface-variant">
+      <header className="sticky top-0 z-20 bg-surface shadow-elevation-1">
+        <div className="mx-auto max-w-2xl px-4">
+          <h1 className="py-4 text-xl font-medium text-gray-900">Financial Control</h1>
+        </div>
       </header>
-      <div className="flex gap-2 px-4">
-        <button
-          onClick={() => setTab('unpaid')}
-          className={tab === 'unpaid' ? 'font-bold underline' : ''}
-        >
-          Unpaid
-        </button>
-        <button onClick={() => setTab('paid')} className={tab === 'paid' ? 'font-bold underline' : ''}>
-          Paid
-        </button>
-      </div>
-      {tab === 'unpaid' ? <UnpaidExpensesList /> : <PaidExpensesList />}
+      <Tabs
+        tabs={[
+          { id: 'unpaid', label: 'Unpaid' },
+          { id: 'paid', label: 'Paid' },
+        ]}
+        active={tab}
+        onChange={(id) => setTab(id as Tab)}
+      />
+      <main className="mx-auto max-w-2xl px-4 pb-28 pt-4">
+        {tab === 'unpaid' ? <UnpaidExpensesList /> : <PaidExpensesList />}
+      </main>
+      <Fab to="/expenses/new" label="New expense" />
     </div>
   )
 }

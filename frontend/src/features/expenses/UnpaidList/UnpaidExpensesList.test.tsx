@@ -7,7 +7,7 @@ import { UnpaidExpensesList } from './UnpaidExpensesList'
 vi.mock('../../../api/expenses')
 
 describe('UnpaidExpensesList', () => {
-  it('highlights expenses that are due today or overdue', () => {
+  it('marks overdue expenses with a status chip and shows nothing for future bills', () => {
     vi.mocked(expensesApi.useUnpaidExpenses).mockReturnValue({
       data: [
         { id: '1', description: 'Overdue rent', amount: '10', due_date: '2020-01-01' },
@@ -25,7 +25,7 @@ describe('UnpaidExpensesList', () => {
       </MemoryRouter>,
     )
 
-    expect(screen.getByTestId('expense-row-1')).toHaveClass('bg-amber-50')
-    expect(screen.getByTestId('expense-row-2')).not.toHaveClass('bg-amber-50')
+    expect(screen.getByTestId('status-chip-1')).toHaveTextContent('Overdue')
+    expect(screen.queryByTestId('status-chip-2')).not.toBeInTheDocument()
   })
 })
