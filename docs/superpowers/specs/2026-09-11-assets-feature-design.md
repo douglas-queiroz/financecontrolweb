@@ -92,10 +92,20 @@ Only used for `reit`/`stock`/`bond`. Bitcoin's value comes entirely from
 | `currency` | enum: `USD`, `EUR`, `BTC` | the "from" side; "to" is always BRL |
 | `rate_to_brl` | `Numeric(12, 6)` | extra precision for FX rates |
 | `date` | date | |
+| `source` | enum: `market`, `manual` | mirrors `AssetValueHistory.source` — see "bridging FX rates before the daily job exists" below |
 | `created_at` | datetime | |
 
 One shared table for every "convert to BRL" rate needed by the feature,
-populated daily by the price/FX job.
+populated daily by the price/FX job (Phase 2). Until that job exists
+(Phase 1), rows are written on-demand as a byproduct of buy/sell
+transactions: a transaction for a non-BRL, non-bitcoin asset may supply
+an optional `fx_rate_to_brl`, which is persisted here with
+`source=manual` **only if no row already exists for that
+`(currency, date)`** (so it never clobbers a real rate the Phase 2 job
+already wrote for that day). A Bitcoin buy/sell always writes its
+`unit_price` (already BRL) as a `currency=BTC` row the same way, since
+that price *is* the BTC→BRL rate at that moment — no separate field
+needed for bitcoin.
 
 ## Categories, currency, and pricing rules
 
@@ -164,15 +174,21 @@ missing keys log a startup warning rather than crashing the app).
   row, with `average_cost = unit_price`.
 - **Buy:** `new_avg_cost = (old_qty * old_avg_cost + qty * unit_price) /
   (old_qty + qty)`; `quantity += qty`. `average_cost_brl` updates the
-  same way, converting `unit_price` to BRL using that buy date's
-  `FxRateHistory` row (or, for bitcoin, using `unit_price` directly since
-  it's already in BRL; for BRL-denominated reit/stock/bond, no
-  conversion is needed either).
+  same way, converting `unit_price` to BRL using the FX rate for that
+  buy's `currency` and `date` (or, for bitcoin, using `unit_price`
+  directly since it's already in BRL; for BRL-denominated reit/stock/
+  bond, no conversion is needed either). Both `AssetCreate` (the initial
+  buy) and `AssetTransactionCreate` accept an optional
+  `fx_rate_to_brl` — see "bridging FX rates before the daily job exists"
+  under `FxRateHistory` above. If none is found on record and none is
+  supplied for a non-BRL, non-bitcoin buy, the request is rejected
+  (422).
 - **Sell:** rejected (422) if `quantity` requested exceeds the asset's
   current `quantity`. `realized_gain_loss_brl` is computed and stored per
-  the `AssetTransaction` table above. `quantity -= qty`;
-  `average_cost`/`average_cost_brl` are unchanged by a sell (only future
-  buys move them).
+  the `AssetTransaction` table above, resolving the sell's FX rate the
+  same way a buy does. `quantity -= qty`; `average_cost`/
+  `average_cost_brl` are unchanged by a sell (only future buys move
+  them).
 - Selling to exactly zero leaves the `Asset` row in place (`quantity =
   0`) rather than deleting it, so the transaction history stays intact
   and the user can buy back into it later. No archiving/hiding of
