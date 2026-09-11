@@ -105,3 +105,64 @@ def test_reverse_payment_clears_paid_at(db_session):
     result = repo.reverse_payment(expense.id)
 
     assert result.paid_at is None
+
+
+def test_fetch_monthly_totals_sums_across_months(db_session):
+    repo = ExpenseRepository(db_session)
+    repo.create(make_input(description="Rent", amount=Decimal("100.00"), due_date=date(2025, 11, 5)))
+    repo.create(make_input(description="Water", amount=Decimal("23.45"), due_date=date(2025, 11, 20)))
+    repo.create(make_input(description="Internet", amount=Decimal("88.00"), due_date=date(2026, 9, 10)))
+
+    totals = repo.fetch_monthly_totals(date(2026, 9, 15))
+
+    assert len(totals) == 12
+    assert totals[0].month == "2025-10"
+    assert totals[1].month == "2025-11"
+    assert totals[-1].month == "2026-09"
+
+
+def test_fetch_monthly_totals_zero_fills_empty_months(db_session):
+    repo = ExpenseRepository(db_session)
+    repo.create(make_input(amount=Decimal("50.00"), due_date=date(2026, 9, 1)))
+
+    totals = repo.fetch_monthly_totals(date(2026, 9, 15))
+
+    assert [t.total for t in totals] == [
+        Decimal("0"),
+        Decimal("0"),
+        Decimal("0"),
+        Decimal("0"),
+        Decimal("0"),
+        Decimal("0"),
+        Decimal("0"),
+        Decimal("0"),
+        Decimal("0"),
+        Decimal("0"),
+        Decimal("0"),
+        Decimal("50.00"),
+    ]
+
+
+def test_fetch_monthly_totals_buckets_boundary_dates(db_session):
+    repo = ExpenseRepository(db_session)
+    repo.create(make_input(amount=Decimal("10"), due_date=date(2025, 10, 1)))
+    repo.create(make_input(amount=Decimal("20"), due_date=date(2025, 10, 31)))
+    repo.create(make_input(amount=Decimal("30"), due_date=date(2025, 11, 1)))
+
+    totals = repo.fetch_monthly_totals(date(2026, 9, 15))
+
+    assert totals[0].month == "2025-10"
+    assert totals[0].total == Decimal("30")
+    assert totals[1].month == "2025-11"
+    assert totals[1].total == Decimal("30")
+
+
+def test_fetch_monthly_totals_includes_paid_expenses(db_session):
+    repo = ExpenseRepository(db_session)
+    expense = repo.create(make_input(amount=Decimal("77.00"), due_date=date(2026, 9, 1)))
+    repo.mark_as_paid(expense.id, datetime(2026, 9, 1, tzinfo=timezone.utc))
+
+    totals = repo.fetch_monthly_totals(date(2026, 9, 15))
+
+    assert totals[-1].month == "2026-09"
+    assert totals[-1].total == Decimal("77.00")

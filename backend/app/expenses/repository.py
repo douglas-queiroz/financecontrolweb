@@ -1,12 +1,13 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
+from decimal import Decimal
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.expenses.models import Expense
 from app.expenses.recurrence import RecurrenceFrequency, next_due_date
-from app.expenses.schemas import ExpenseCreate, ExpenseUpdate
+from app.expenses.schemas import ExpenseCreate, ExpenseUpdate, MonthlyTotal
 
 
 class ExpenseNotFoundError(Exception):
@@ -112,3 +113,36 @@ class ExpenseRepository:
         self.db.commit()
         self.db.refresh(expense)
         return expense
+
+    def fetch_monthly_totals(self, today: date) -> list[MonthlyTotal]:
+        start_index = today.year * 12 + (today.month - 1) - 11
+        start_year, start_month = divmod(start_index, 12)
+        start_of_range = date(start_year, start_month + 1, 1)
+
+        last_index = today.year * 12 + (today.month - 1)
+        end_year, end_month = divmod(last_index + 1, 12)
+        end_of_range_exclusive = date(end_year, end_month + 1, 1)
+
+        stmt = select(Expense).where(
+            Expense.due_date >= start_of_range,
+            Expense.due_date < end_of_range_exclusive,
+        )
+        rows = list(self.db.scalars(stmt))
+
+        buckets: dict[tuple[int, int], Decimal] = {}
+        for expense in rows:
+            key = (expense.due_date.year, expense.due_date.month)
+            buckets[key] = buckets.get(key, Decimal("0")) + expense.amount
+
+        totals: list[MonthlyTotal] = []
+        for offset in range(12):
+            index = start_index + offset
+            year, month = divmod(index, 12)
+            month_number = month + 1
+            totals.append(
+                MonthlyTotal(
+                    month=f"{year}-{month_number:02d}",
+                    total=buckets.get((year, month_number), Decimal("0")),
+                )
+            )
+        return totals

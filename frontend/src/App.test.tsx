@@ -1,13 +1,25 @@
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
+import * as assetsApi from './api/assets'
 import * as expensesApi from './api/expenses'
 import App from './App'
 
 vi.mock('./api/expenses')
+vi.mock('./api/assets')
 
 describe('App', () => {
-  it('renders the expenses page at the root route', () => {
+  it('renders the app shell with the dashboard at the root route', () => {
+    vi.mocked(assetsApi.useAssetMonthlyTotals).mockReturnValue({
+      data: [],
+      isLoading: false,
+      error: null,
+    } as never)
+    vi.mocked(expensesApi.useMonthlyTotals).mockReturnValue({
+      data: [],
+      isLoading: false,
+      error: null,
+    } as never)
     vi.mocked(expensesApi.useUnpaidExpenses).mockReturnValue({
       data: [],
       isLoading: false,

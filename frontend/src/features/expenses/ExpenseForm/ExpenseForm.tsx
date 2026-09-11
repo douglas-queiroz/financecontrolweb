@@ -59,9 +59,8 @@ export function ExpenseForm({ mode, initialExpense }: ExpenseFormProps) {
   }
 
   return (
-    <div className="min-h-screen bg-surface-variant">
-      <div className="mx-auto max-w-2xl px-4 py-6">
-        <div className="rounded-xl bg-surface p-6 shadow-elevation-1">
+    <div className="mx-auto max-w-2xl px-4 py-6">
+      <div className="rounded-xl bg-surface p-6 shadow-elevation-1">
           <h1 className="mb-6 text-xl font-medium text-gray-900">
             {mode === 'create' ? 'New expense' : 'Edit expense'}
           </h1>
@@ -147,7 +146,6 @@ export function ExpenseForm({ mode, initialExpense }: ExpenseFormProps) {
             </button>
           </form>
         </div>
-      </div>
     </div>
   )
 }

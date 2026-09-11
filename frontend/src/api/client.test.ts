@@ -33,4 +33,16 @@ describe('apiClient', () => {
 
     await expect(apiClient.get('/expenses/missing')).rejects.toThrow(ApiError)
   })
+
+  it('sends a PATCH request with a JSON body', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ id: '1' }) })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await apiClient.patch('/assets/1', { name: 'New name' })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/assets/1',
+      expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ name: 'New name' }) }),
+    )
+  })
 })

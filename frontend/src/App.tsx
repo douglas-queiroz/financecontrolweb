@@ -1,6 +1,11 @@
 import { Route, Routes, useParams } from 'react-router-dom'
 import { usePaidExpenses, useUnpaidExpenses } from './api/expenses'
+import { AppShell } from './components/AppShell'
 import { SkeletonRow } from './components/SkeletonRow'
+import { AssetDetailPage } from './features/assets/AssetDetailPage'
+import { AssetForm } from './features/assets/AssetForm'
+import { AssetsPage } from './features/assets/AssetsPage'
+import { DashboardPage } from './features/dashboard/DashboardPage'
 import { ExpenseForm } from './features/expenses/ExpenseForm/ExpenseForm'
 import { ExpensesPage } from './features/expenses/ExpensesPage'
 
@@ -14,7 +19,7 @@ function EditExpenseRoute() {
 
   if (!expense) {
     return (
-      <div className="min-h-screen bg-surface-variant p-4">
+      <div className="p-4">
         <div className="mx-auto max-w-2xl space-y-3">
           <SkeletonRow />
         </div>
@@ -28,9 +33,15 @@ function EditExpenseRoute() {
 function App() {
   return (
     <Routes>
-      <Route path="/" element={<ExpensesPage />} />
-      <Route path="/expenses/new" element={<ExpenseForm mode="create" />} />
-      <Route path="/expenses/:id/edit" element={<EditExpenseRoute />} />
+      <Route element={<AppShell />}>
+        <Route path="/" element={<DashboardPage />} />
+        <Route path="/expenses" element={<ExpensesPage />} />
+        <Route path="/expenses/new" element={<ExpenseForm mode="create" />} />
+        <Route path="/expenses/:id/edit" element={<EditExpenseRoute />} />
+        <Route path="/assets" element={<AssetsPage />} />
+        <Route path="/assets/new" element={<AssetForm />} />
+        <Route path="/assets/:id" element={<AssetDetailPage />} />
+      </Route>
     </Routes>
   )
 }

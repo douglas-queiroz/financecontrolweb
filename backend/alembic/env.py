@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from app.core.config import settings
 from app.core.database import Base
 from app.expenses import models  # noqa: F401  (registers Expense with Base.metadata)
+from app.assets import models as asset_models  # noqa: F401  (registers Asset tables with Base.metadata)
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

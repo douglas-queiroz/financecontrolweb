@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -6,13 +6,18 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.expenses.repository import ExpenseNotFoundError, ExpenseRepository
-from app.expenses.schemas import ExpenseCreate, ExpenseRead, ExpenseUpdate
+from app.expenses.schemas import ExpenseCreate, ExpenseRead, ExpenseUpdate, MonthlyTotal
 
 router = APIRouter(prefix="/api/expenses", tags=["expenses"])
 
 
 def get_repository(db: Session = Depends(get_db)) -> ExpenseRepository:
     return ExpenseRepository(db)
+
+
+@router.get("/monthly-totals", response_model=list[MonthlyTotal])
+def monthly_totals(repo: ExpenseRepository = Depends(get_repository)):
+    return repo.fetch_monthly_totals(date.today())
 
 
 @router.get("/unpaid", response_model=list[ExpenseRead])

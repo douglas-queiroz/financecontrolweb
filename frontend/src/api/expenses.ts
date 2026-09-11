@@ -1,8 +1,16 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from './client'
 import type { Expense, ExpenseInput } from '../features/expenses/types'
+import type { MonthlyTotal } from '../features/dashboard/types'
 
 const PAGE_SIZE = 20
+
+export function useMonthlyTotals() {
+  return useQuery({
+    queryKey: ['expenses', 'monthly-totals'],
+    queryFn: () => apiClient.get<MonthlyTotal[]>('/expenses/monthly-totals'),
+  })
+}
 
 export function useUnpaidExpenses() {
   return useQuery({

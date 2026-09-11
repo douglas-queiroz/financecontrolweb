@@ -45,6 +45,15 @@ class ExpenseUpdate(ExpenseBase):
     pass
 
 
+class MonthlyTotal(BaseModel):
+    month: str
+    total: Decimal
+
+    @field_serializer("total")
+    def serialize_total(self, value: Decimal) -> str:
+        return f"{value:.2f}"
+
+
 class ExpenseRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
