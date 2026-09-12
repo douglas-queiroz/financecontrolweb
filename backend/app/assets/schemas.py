@@ -115,7 +115,7 @@ class AssetRead(BaseModel):
         "quantity", "average_cost", "average_cost_brl", "current_value_brl", "unrealized_gain_loss_brl"
     )
     def serialize_decimal(self, value: Decimal) -> str:
-        return str(value)
+        return f"{value:.2f}"
 
 
 class AssetTransactionRead(BaseModel):
@@ -131,8 +131,8 @@ class AssetTransactionRead(BaseModel):
 
     @field_serializer("quantity", "unit_price", "total_amount")
     def serialize_decimal(self, value: Decimal) -> str:
-        return str(value)
+        return f"{value:.2f}"
 
     @field_serializer("realized_gain_loss_brl")
     def serialize_realized(self, value: Decimal | None) -> str | None:
-        return str(value) if value is not None else None
+        return f"{value:.2f}" if value is not None else None

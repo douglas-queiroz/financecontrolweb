@@ -8,6 +8,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import { formatBRL } from '../../lib/currency'
 import type { MonthlyTotal } from './types'
 
 const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -53,10 +54,6 @@ function currentMonthKey(): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 }
 
-function formatTotal(value: number | string): string {
-  return Number(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
-
 function toChartPoints(totals: MonthlyTotal[]): ChartPoint[] {
   const current = currentMonthKey()
   return totals.map((total) => {
@@ -77,7 +74,7 @@ function ChartTooltip({ active, payload }: ChartTooltipProps) {
   return (
     <div className="rounded-lg bg-surface p-3 text-sm shadow-elevation-2">
       <p className="font-medium text-gray-900">{point.fullMonth}</p>
-      <p className="text-gray-600">{formatTotal(point.total)}</p>
+      <p className="text-gray-600">{formatBRL(point.total)}</p>
     </div>
   )
 }
@@ -93,8 +90,8 @@ export function AssetMonthlyTotalsChart({ data }: AssetMonthlyTotalsChartProps) 
           <XAxis dataKey="label" tick={{ fontSize: 12, fill: '#6b7280' }} tickMargin={8} />
           <YAxis
             tick={{ fontSize: 12, fill: '#6b7280' }}
-            tickFormatter={(value: number) => Number(value).toLocaleString()}
-            width={56}
+            tickFormatter={(value: number) => formatBRL(value)}
+            width={88}
           />
           <Tooltip content={<ChartTooltip />} cursor={{ fill: 'rgba(0, 0, 0, 0.04)' }} />
           <Bar dataKey="total" radius={[4, 4, 0, 0]}>

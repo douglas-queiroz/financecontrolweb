@@ -1,5 +1,6 @@
 import { Chip } from '../../../components/Chip'
 import { Icon } from '../../../components/Icon'
+import { formatBRL } from '../../../lib/currency'
 import type { Expense } from '../types'
 
 export type ExpenseStatus = 'overdue' | 'due-soon' | 'normal'
@@ -32,7 +33,7 @@ export function ExpenseRow({
         <p className="truncate font-medium text-gray-900">{expense.description}</p>
         <div className="mt-1 flex flex-wrap items-center gap-2">
           <p className="text-sm text-gray-500">
-            {expense.amount} · due {expense.due_date}
+            {formatBRL(expense.amount)} · due {expense.due_date}
             {expense.paid_at ? ` · paid ${expense.paid_at}` : ''}
           </p>
           {status === 'overdue' && <Chip label="Overdue" tone="danger" testId={`status-chip-${expense.id}`} />}
