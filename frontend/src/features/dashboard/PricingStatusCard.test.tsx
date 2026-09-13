@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import * as pricingApi from '../../api/pricing'
+import { formatDate } from '../../lib/date'
 import { PricingStatusCard } from './PricingStatusCard'
 
 vi.mock('../../api/pricing')
@@ -39,7 +40,7 @@ describe('PricingStatusCard', () => {
     expect(screen.getByTestId('pricing-last-fx')).toHaveTextContent('Never')
   })
 
-  it('labels recent updates as Today and Yesterday', () => {
+  it('shows the last update dates in dd/MM/yyyy', () => {
     const today = new Date()
     const yesterday = new Date(today)
     yesterday.setDate(today.getDate() - 1)
@@ -47,8 +48,8 @@ describe('PricingStatusCard', () => {
 
     render(<PricingStatusCard />)
 
-    expect(screen.getByTestId('pricing-last-price')).toHaveTextContent(/today/i)
-    expect(screen.getByTestId('pricing-last-fx')).toHaveTextContent('Yesterday')
+    expect(screen.getByTestId('pricing-last-price')).toHaveTextContent(formatDate(iso(today)))
+    expect(screen.getByTestId('pricing-last-fx')).toHaveTextContent(formatDate(iso(yesterday)))
   })
 
   it('shows a hint when no provider keys are configured', () => {

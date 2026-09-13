@@ -1,5 +1,6 @@
 import { Chip } from '../../../components/Chip'
 import { Icon } from '../../../components/Icon'
+import { formatDateTime, formatDate } from '../../../lib/date'
 import { formatBRL } from '../../../lib/currency'
 import type { Expense } from '../types'
 
@@ -37,8 +38,8 @@ export function ExpenseRow({
         <p className="truncate font-medium text-gray-900">{expense.description}</p>
         <div className="mt-1 flex flex-wrap items-center gap-2">
           <p className="text-sm text-gray-500">
-            {formatBRL(expense.amount)} · due {expense.due_date}
-            {expense.paid_at ? ` · paid ${expense.paid_at}` : ''}
+            {formatBRL(expense.amount)} · due {formatDate(expense.due_date)}
+            {expense.paid_at ? ` · paid ${formatDateTime(expense.paid_at)}` : ''}
           </p>
           {isPaid ? (
             <Chip label="Paid" tone="success" testId={`status-chip-${expense.id}`} />

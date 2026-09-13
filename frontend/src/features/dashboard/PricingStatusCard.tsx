@@ -1,12 +1,8 @@
 import { usePricingStatus, useRefreshPricing } from '../../api/pricing'
+import { formatDate } from '../../lib/date'
 
-function formatUpdateDate(iso: string | null | undefined): string {
-  if (!iso) return 'Never'
-  const date = new Date(`${iso}T00:00:00`)
-  const diffDays = Math.round((new Date().getTime() - date.getTime()) / 86_400_000)
-  if (diffDays <= 0) return 'Today'
-  if (diffDays === 1) return 'Yesterday'
-  return `${diffDays} days ago`
+function updateLabel(iso: string | null | undefined): string {
+  return iso ? formatDate(iso) : 'Never'
 }
 
 export function PricingStatusCard() {
@@ -37,13 +33,13 @@ export function PricingStatusCard() {
           <div className="flex items-center justify-between">
             <dt>Asset prices</dt>
             <dd data-testid="pricing-last-price" className="font-medium text-gray-900">
-              {formatUpdateDate(data?.last_price_update)}
+              {updateLabel(data?.last_price_update)}
             </dd>
           </div>
           <div className="flex items-center justify-between">
             <dt>FX rates (BRL)</dt>
             <dd data-testid="pricing-last-fx" className="font-medium text-gray-900">
-              {formatUpdateDate(data?.last_fx_update)}
+              {updateLabel(data?.last_fx_update)}
             </dd>
           </div>
           {!data?.has_brapi_key && !data?.has_twelvedata_key && !data?.has_coingecko_key && (

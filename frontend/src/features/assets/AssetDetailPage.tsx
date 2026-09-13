@@ -4,6 +4,7 @@ import { useAssets, useAssetTransactions, useUpdateAssetValue } from '../../api/
 import { CurrencyInput } from '../../components/CurrencyInput'
 import { SkeletonRow } from '../../components/SkeletonRow'
 import { formatBRL } from '../../lib/currency'
+import { formatDate } from '../../lib/date'
 import { BuySellForm } from './BuySellForm'
 
 export function AssetDetailPage() {
@@ -114,7 +115,7 @@ export function AssetDetailPage() {
             {transactions.map((t) => (
               <li key={t.id} data-testid={`transaction-${t.id}`} className="flex justify-between text-sm">
                 <span>
-                  {t.type} {t.quantity} @ {t.unit_price} {unitCurrencyLabel} · {t.date}
+                  {t.type} {t.quantity} @ {t.unit_price} {unitCurrencyLabel} · {formatDate(t.date)}
                 </span>
                 {t.realized_gain_loss_brl !== null && (
                   <span
