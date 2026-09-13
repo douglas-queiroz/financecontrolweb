@@ -11,6 +11,7 @@ from app.core.database import SessionLocal
 from app.expenses.router import router as expenses_router
 from app.assets.router import router as assets_router
 from app.pricing.job import run_daily_price_update
+from app.pricing.router import router as pricing_router
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +56,7 @@ app.add_middleware(
 
 app.include_router(expenses_router)
 app.include_router(assets_router)
+app.include_router(pricing_router)
 
 
 @app.get("/health")

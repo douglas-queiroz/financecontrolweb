@@ -2,6 +2,7 @@ import { useAssetMonthlyTotals } from '../../api/assets'
 import { useMonthlyTotals } from '../../api/expenses'
 import { AssetMonthlyTotalsChart } from './AssetMonthlyTotalsChart'
 import { MonthlyTotalsChart } from './MonthlyTotalsChart'
+import { PricingStatusCard } from './PricingStatusCard'
 
 export function DashboardPage() {
   const { data, isLoading, error } = useMonthlyTotals()
@@ -9,6 +10,7 @@ export function DashboardPage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-4 px-4 py-6">
+      <PricingStatusCard />
       <div className="rounded-xl bg-surface p-6 shadow-elevation-1">
         <h2 className="mb-6 text-lg font-medium text-gray-900">Monthly expenses</h2>
         {isLoading ? (

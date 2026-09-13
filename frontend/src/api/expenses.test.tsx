@@ -3,7 +3,7 @@ import { renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { apiClient } from './client'
-import { useCreateExpense, useUnpaidExpenses } from './expenses'
+import { useCreateExpense, useExpense, useExpensesByMonth } from './expenses'
 
 vi.mock('./client', () => ({
   apiClient: {
@@ -21,15 +21,26 @@ function createWrapper() {
   }
 }
 
-describe('useUnpaidExpenses', () => {
-  it('fetches the unpaid list', async () => {
+describe('useExpensesByMonth', () => {
+  it('fetches the list for the given year and month', async () => {
     vi.mocked(apiClient.get).mockResolvedValue([{ id: '1', description: 'Rent' }])
 
-    const { result } = renderHook(() => useUnpaidExpenses(), { wrapper: createWrapper() })
+    const { result } = renderHook(() => useExpensesByMonth(2026, 1), { wrapper: createWrapper() })
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
-    expect(apiClient.get).toHaveBeenCalledWith('/expenses/unpaid?limit=20')
+    expect(apiClient.get).toHaveBeenCalledWith('/expenses?year=2026&month=1')
     expect(result.current.data).toEqual([{ id: '1', description: 'Rent' }])
+  })
+})
+
+describe('useExpense', () => {
+  it('fetches a single expense by id', async () => {
+    vi.mocked(apiClient.get).mockResolvedValue({ id: '1', description: 'Rent' })
+
+    const { result } = renderHook(() => useExpense('1'), { wrapper: createWrapper() })
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(apiClient.get).toHaveBeenCalledWith('/expenses/1')
   })
 })
 

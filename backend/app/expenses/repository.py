@@ -20,22 +20,20 @@ class ExpenseRepository:
     def __init__(self, db: Session):
         self.db = db
 
-    def fetch_unpaid(self, limit: int = 20) -> list[Expense]:
-        stmt = (
-            select(Expense)
-            .where(Expense.paid_at.is_(None))
-            .order_by(Expense.due_date.asc())
-            .limit(limit)
-        )
-        return list(self.db.scalars(stmt))
+    def fetch_by_month(self, year: int, month: int) -> list[Expense]:
+        start_of_month = date(year, month, 1)
+        if month == 12:
+            end_of_month_exclusive = date(year + 1, 1, 1)
+        else:
+            end_of_month_exclusive = date(year, month + 1, 1)
 
-    def fetch_paid(self, offset: int = 0, limit: int = 20) -> list[Expense]:
         stmt = (
             select(Expense)
-            .where(Expense.paid_at.is_not(None))
-            .order_by(Expense.paid_at.desc())
-            .offset(offset)
-            .limit(limit)
+            .where(
+                Expense.due_date >= start_of_month,
+                Expense.due_date < end_of_month_exclusive,
+            )
+            .order_by(Expense.paid_at.is_(None).desc(), Expense.due_date.asc())
         )
         return list(self.db.scalars(stmt))
 
@@ -44,6 +42,9 @@ class ExpenseRepository:
         if expense is None:
             raise ExpenseNotFoundError(expense_id)
         return expense
+
+    def get(self, expense_id: uuid.UUID) -> Expense:
+        return self._get(expense_id)
 
     def create(self, data: ExpenseCreate) -> Expense:
         expense = Expense(

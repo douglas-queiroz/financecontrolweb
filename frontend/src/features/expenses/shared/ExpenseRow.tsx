@@ -24,10 +24,14 @@ export function ExpenseRow({
   onEdit,
   onDelete,
 }: ExpenseRowProps) {
+  const isPaid = expense.paid_at != null
+
   return (
     <div
       data-testid={`expense-row-${expense.id}`}
-      className="flex items-start justify-between gap-3 rounded-xl bg-surface p-4 shadow-elevation-1"
+      className={`flex items-start justify-between gap-3 rounded-xl bg-surface p-4 shadow-elevation-1 ${
+        isPaid ? 'opacity-60' : ''
+      }`}
     >
       <div className="min-w-0">
         <p className="truncate font-medium text-gray-900">{expense.description}</p>
@@ -36,8 +40,14 @@ export function ExpenseRow({
             {formatBRL(expense.amount)} · due {expense.due_date}
             {expense.paid_at ? ` · paid ${expense.paid_at}` : ''}
           </p>
-          {status === 'overdue' && <Chip label="Overdue" tone="danger" testId={`status-chip-${expense.id}`} />}
-          {status === 'due-soon' && <Chip label="Due soon" tone="warning" testId={`status-chip-${expense.id}`} />}
+          {isPaid ? (
+            <Chip label="Paid" tone="success" testId={`status-chip-${expense.id}`} />
+          ) : (
+            <>
+              {status === 'overdue' && <Chip label="Overdue" tone="danger" testId={`status-chip-${expense.id}`} />}
+              {status === 'due-soon' && <Chip label="Due soon" tone="warning" testId={`status-chip-${expense.id}`} />}
+            </>
+          )}
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-1">

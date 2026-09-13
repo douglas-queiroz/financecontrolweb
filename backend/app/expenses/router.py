@@ -20,23 +20,26 @@ def monthly_totals(repo: ExpenseRepository = Depends(get_repository)):
     return repo.fetch_monthly_totals(date.today())
 
 
-@router.get("/unpaid", response_model=list[ExpenseRead])
-def list_unpaid(limit: int = Query(20, ge=1, le=100), repo: ExpenseRepository = Depends(get_repository)):
-    return repo.fetch_unpaid(limit=limit)
-
-
-@router.get("/paid", response_model=list[ExpenseRead])
-def list_paid(
-    offset: int = Query(0, ge=0),
-    limit: int = Query(20, ge=1, le=100),
+@router.get("", response_model=list[ExpenseRead])
+def list_by_month(
+    year: int = Query(...),
+    month: int = Query(..., ge=1, le=12),
     repo: ExpenseRepository = Depends(get_repository),
 ):
-    return repo.fetch_paid(offset=offset, limit=limit)
+    return repo.fetch_by_month(year=year, month=month)
 
 
 @router.post("", response_model=ExpenseRead, status_code=201)
 def create_expense(data: ExpenseCreate, repo: ExpenseRepository = Depends(get_repository)):
     return repo.create(data)
+
+
+@router.get("/{expense_id}", response_model=ExpenseRead)
+def get_expense(expense_id: UUID, repo: ExpenseRepository = Depends(get_repository)):
+    try:
+        return repo.get(expense_id)
+    except ExpenseNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.put("/{expense_id}", response_model=ExpenseRead)

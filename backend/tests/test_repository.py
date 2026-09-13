@@ -19,22 +19,43 @@ def test_create_expense(db_session):
     assert expense.description == "Rent"
 
 
-def test_fetch_unpaid_sorted_by_due_date(db_session):
+def test_fetch_by_month_sorted_by_due_date(db_session):
     repo = ExpenseRepository(db_session)
-    repo.create(make_input(description="B", due_date=date(2026, 2, 1)))
-    repo.create(make_input(description="A", due_date=date(2026, 1, 1)))
+    repo.create(make_input(description="B", due_date=date(2026, 1, 20)))
+    repo.create(make_input(description="A", due_date=date(2026, 1, 5)))
 
-    result = repo.fetch_unpaid(limit=20)
+    result = repo.fetch_by_month(year=2026, month=1)
     assert [e.description for e in result] == ["A", "B"]
 
 
-def test_fetch_unpaid_respects_limit(db_session):
+def test_fetch_by_month_excludes_other_months(db_session):
     repo = ExpenseRepository(db_session)
-    for i in range(5):
-        repo.create(make_input(description=f"E{i}", due_date=date(2026, 1, i + 1)))
+    repo.create(make_input(description="December", due_date=date(2025, 12, 31)))
+    repo.create(make_input(description="January", due_date=date(2026, 1, 1)))
+    repo.create(make_input(description="February", due_date=date(2026, 2, 1)))
 
-    result = repo.fetch_unpaid(limit=3)
-    assert len(result) == 3
+    result = repo.fetch_by_month(year=2026, month=1)
+    assert [e.description for e in result] == ["January"]
+
+
+def test_fetch_by_month_handles_december_year_wraparound(db_session):
+    repo = ExpenseRepository(db_session)
+    repo.create(make_input(description="December", due_date=date(2025, 12, 15)))
+    repo.create(make_input(description="Next January", due_date=date(2026, 1, 1)))
+
+    result = repo.fetch_by_month(year=2025, month=12)
+    assert [e.description for e in result] == ["December"]
+
+
+def test_fetch_by_month_orders_unpaid_before_paid_then_by_due_date(db_session):
+    repo = ExpenseRepository(db_session)
+    repo.create(make_input(description="Early unpaid", due_date=date(2026, 1, 10)))
+    repo.create(make_input(description="Late unpaid", due_date=date(2026, 1, 20)))
+    paid = repo.create(make_input(description="Paid early", due_date=date(2026, 1, 5)))
+    repo.mark_as_paid(paid.id, datetime(2026, 1, 5, tzinfo=timezone.utc))
+
+    result = repo.fetch_by_month(year=2026, month=1)
+    assert [e.description for e in result] == ["Early unpaid", "Late unpaid", "Paid early"]
 
 
 def test_update_expense(db_session):
@@ -55,7 +76,7 @@ def test_delete_expense(db_session):
 
     repo.delete(expense.id)
 
-    result = repo.fetch_unpaid(limit=20)
+    result = repo.fetch_by_month(year=2026, month=1)
     assert result == []
 
 
@@ -81,8 +102,8 @@ def test_mark_as_paid_recurring_creates_next_occurrence(db_session):
 
     repo.mark_as_paid(expense.id, datetime(2026, 1, 1, tzinfo=timezone.utc))
 
-    unpaid = repo.fetch_unpaid(limit=20)
-    assert any(e.due_date == date(2026, 2, 1) for e in unpaid)
+    next_month = repo.fetch_by_month(year=2026, month=2)
+    assert any(e.due_date == date(2026, 2, 1) for e in next_month)
 
 
 def test_mark_as_paid_non_recurring_creates_nothing_extra(db_session):
@@ -91,10 +112,9 @@ def test_mark_as_paid_non_recurring_creates_nothing_extra(db_session):
 
     repo.mark_as_paid(expense.id, datetime(2026, 1, 1, tzinfo=timezone.utc))
 
-    paid = repo.fetch_paid(offset=0, limit=20)
-    unpaid = repo.fetch_unpaid(limit=20)
-    assert len(paid) == 1
-    assert len(unpaid) == 0
+    result = repo.fetch_by_month(year=2026, month=1)
+    assert len(result) == 1
+    assert result[0].paid_at is not None
 
 
 def test_reverse_payment_clears_paid_at(db_session):

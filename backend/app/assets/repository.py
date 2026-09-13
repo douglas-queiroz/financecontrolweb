@@ -310,8 +310,24 @@ class AssetRepository:
                 currency=currency,
                 rate_to_brl=rate,
                 date=on_date,
-                source=ValueSource.market.value,
+source=ValueSource.market.value,
             )
+        )
+
+    def latest_market_price(self) -> date_type | None:
+        return self.db.scalar(
+            select(AssetValueHistory.date)
+            .where(AssetValueHistory.source == ValueSource.market.value)
+            .order_by(AssetValueHistory.date.desc(), AssetValueHistory.created_at.desc())
+            .limit(1)
+        )
+
+    def latest_market_fx_rate(self) -> date_type | None:
+        return self.db.scalar(
+            select(FxRateHistory.date)
+            .where(FxRateHistory.source == ValueSource.market.value)
+            .order_by(FxRateHistory.date.desc(), FxRateHistory.created_at.desc())
+            .limit(1)
         )
 
     def update_asset_name(self, asset_id: uuid.UUID, data: AssetUpdate) -> AssetRead:

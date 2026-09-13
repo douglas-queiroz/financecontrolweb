@@ -57,17 +57,40 @@ def test_create_expense_rejects_invalid_amount(client):
     assert response.status_code == 422
 
 
-def test_list_unpaid_sorted_by_due_date(client):
-    client.post("/api/expenses", json={"description": "B", "amount": "10", "due_date": "2026-02-01"})
-    client.post("/api/expenses", json={"description": "A", "amount": "10", "due_date": "2026-01-01"})
+def test_list_by_month_sorted_by_due_date(client):
+    client.post("/api/expenses", json={"description": "B", "amount": "10", "due_date": "2026-01-20"})
+    client.post("/api/expenses", json={"description": "A", "amount": "10", "due_date": "2026-01-05"})
 
-    response = client.get("/api/expenses/unpaid")
+    response = client.get("/api/expenses?year=2026&month=1")
     assert response.status_code == 200
     descriptions = [item["description"] for item in response.json()]
     assert descriptions == ["A", "B"]
 
 
-def test_mark_as_paid_moves_expense_to_paid_list(client):
+def test_list_by_month_excludes_other_months(client):
+    client.post("/api/expenses", json={"description": "January", "amount": "10", "due_date": "2026-01-15"})
+    client.post("/api/expenses", json={"description": "February", "amount": "10", "due_date": "2026-02-15"})
+
+    response = client.get("/api/expenses?year=2026&month=1")
+    assert response.status_code == 200
+    descriptions = [item["description"] for item in response.json()]
+    assert descriptions == ["January"]
+
+
+def test_list_by_month_places_paid_after_unpaid(client):
+    client.post("/api/expenses", json={"description": "Unpaid", "amount": "10", "due_date": "2026-01-20"})
+    paid = client.post(
+        "/api/expenses", json={"description": "Paid", "amount": "10", "due_date": "2026-01-05"}
+    ).json()
+    client.post(f"/api/expenses/{paid['id']}/mark-paid")
+
+    response = client.get("/api/expenses?year=2026&month=1")
+    assert response.status_code == 200
+    descriptions = [item["description"] for item in response.json()]
+    assert descriptions == ["Unpaid", "Paid"]
+
+
+def test_mark_as_paid_sets_paid_at_and_keeps_expense_in_month_list(client):
     created = client.post(
         "/api/expenses", json={"description": "Rent", "amount": "10", "due_date": "2026-01-01"}
     ).json()
@@ -76,11 +99,10 @@ def test_mark_as_paid_moves_expense_to_paid_list(client):
     assert response.status_code == 200
     assert response.json()["paid_at"] is not None
 
-    unpaid = client.get("/api/expenses/unpaid").json()
-    assert all(item["id"] != created["id"] for item in unpaid)
-
-    paid = client.get("/api/expenses/paid").json()
-    assert any(item["id"] == created["id"] for item in paid)
+    month_list = client.get("/api/expenses?year=2026&month=1").json()
+    matching = [item for item in month_list if item["id"] == created["id"]]
+    assert len(matching) == 1
+    assert matching[0]["paid_at"] is not None
 
 
 def test_mark_as_paid_recurring_spawns_next_occurrence(client):
@@ -97,8 +119,8 @@ def test_mark_as_paid_recurring_spawns_next_occurrence(client):
 
     client.post(f"/api/expenses/{created['id']}/mark-paid")
 
-    unpaid = client.get("/api/expenses/unpaid").json()
-    assert any(item["due_date"] == "2026-02-01" for item in unpaid)
+    next_month = client.get("/api/expenses?year=2026&month=2").json()
+    assert any(item["due_date"] == "2026-02-01" for item in next_month)
 
 
 def test_reverse_payment_returns_expense_to_unpaid(client):
@@ -120,8 +142,24 @@ def test_delete_expense(client):
     response = client.delete(f"/api/expenses/{created['id']}")
     assert response.status_code == 204
 
-    unpaid = client.get("/api/expenses/unpaid").json()
-    assert all(item["id"] != created["id"] for item in unpaid)
+    month_list = client.get("/api/expenses?year=2026&month=1").json()
+    assert all(item["id"] != created["id"] for item in month_list)
+
+
+def test_get_expense_by_id(client):
+    created = client.post(
+        "/api/expenses", json={"description": "Rent", "amount": "10", "due_date": "2026-01-01"}
+    ).json()
+
+    response = client.get(f"/api/expenses/{created['id']}")
+
+    assert response.status_code == 200
+    assert response.json()["id"] == created["id"]
+
+
+def test_get_missing_expense_returns_404(client):
+    response = client.get("/api/expenses/00000000-0000-0000-0000-000000000000")
+    assert response.status_code == 404
 
 
 def test_update_missing_expense_returns_404(client):
@@ -164,3 +202,88 @@ def test_monthly_totals_sums_due_amounts(client):
 
     assert body[0]["total"] == "1300.50"
     assert all(entry["total"] == "0.00" for entry in body[1:])
+
+
+def test_manual_pricing_refresh_runs_the_job(client, monkeypatch):
+    from app.pricing import router as pricing_router
+
+    calls = []
+
+    def fake_run(db):
+        calls.append(db)
+
+    monkeypatch.setattr(pricing_router, "run_daily_price_update", fake_run)
+
+    response = client.post("/api/pricing/refresh")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+    assert len(calls) == 1
+
+
+def test_pricing_status_empty(client):
+    response = client.get("/api/pricing/status")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["last_price_update"] is None
+    assert body["last_fx_update"] is None
+
+
+def test_pricing_status_reports_latest_market_updates():
+    from decimal import Decimal
+
+    from fastapi.testclient import TestClient
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+
+    from app.assets.models import Currency
+    from app.assets.repository import AssetRepository
+    from app.assets.schemas import AssetCategory, AssetCreate
+    from app.core.database import Base, get_db
+    from app.main import app
+
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    TestingSessionLocal = sessionmaker(bind=engine)
+
+    def override_get_db():
+        db = TestingSessionLocal()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        db = TestingSessionLocal()
+        asset = AssetRepository(db).create_asset(
+            AssetCreate(
+                name="VOO",
+                category=AssetCategory.stock,
+                code="VOO",
+                currency=Currency.USD,
+                quantity=Decimal("5"),
+                unit_price=Decimal("450.00"),
+                date=date(2026, 1, 1),
+                fx_rate_to_brl=Decimal("5.00"),
+            )
+        )
+        repo = AssetRepository(db)
+        repo.record_market_price(asset.id, Decimal("478.29"), date(2026, 9, 13))
+        repo.record_market_fx_rate("USD", Decimal("5.30"), date(2026, 9, 13))
+        db.commit()
+        db.close()
+
+        response = TestClient(app).get("/api/pricing/status")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["last_price_update"] == "2026-09-13"
+        assert body["last_fx_update"] == "2026-09-13"
+    finally:
+        app.dependency_overrides.clear()
+        engine.dispose()

@@ -9,6 +9,9 @@ services:
     environment:
       DATABASE_URL: sqlite:////app/data/financecontrol.db
       CORS_ORIGINS: '["http://localhost:5173"]'
+      BRAPI_API_TOKEN: ${BRAPI_API_TOKEN:-}
+      COINGECKO_API_KEY: ${COINGECKO_API_KEY:-}
+      TWELVE_DATA_API_KEY: ${TWELVE_DATA_API_KEY:-}
 
   frontend:
     build: ./frontend
