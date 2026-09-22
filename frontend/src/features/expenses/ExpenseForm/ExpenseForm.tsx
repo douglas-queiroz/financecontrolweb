@@ -49,7 +49,7 @@ export function ExpenseForm({ mode, initialExpense }: ExpenseFormProps) {
       recurrence_end_date: isRecurring && endDate ? endDate : null,
     }
 
-    const onSuccess = () => navigate('/')
+    const onSuccess = () => navigate('/expenses')
 
     if (mode === 'create') {
       createExpense.mutate(input, { onSuccess })
