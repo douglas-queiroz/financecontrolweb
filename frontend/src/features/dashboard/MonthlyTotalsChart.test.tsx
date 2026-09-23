@@ -44,32 +44,43 @@ afterEach(() => {
 })
 
 describe('toChartPoints', () => {
-  it('points the highlighted bar at next month once the current month is fully paid', () => {
+  it('appends the next month bar once the current month is fully paid', () => {
     const points = toChartPoints(fixture({ all_paid: true, next_month_total: '500.00' }))
-    const last = points[11]
 
-    expect(last.month).toBe('2026-09') // React key stays the underlying month
-    expect(last.isCurrentMonth).toBe(true)
-    expect(last.isShowingNextMonth).toBe(true)
-    expect(last.label).toBe("Oct '26")
-    expect(last.fullMonth).toBe('October 2026')
-    expect(last.total).toBe('500.00')
+    expect(points).toHaveLength(13)
+    const current = points[11]
+    expect(current.month).toBe('2026-09')
+    expect(current.isCurrentMonth).toBe(true)
+    expect(current.isShowingNextMonth).toBe(false)
+    expect(current.label).toBe("Sep '26")
+    expect(current.fullMonth).toBe('September 2026')
+    expect(current.total).toBe('100.00')
+
+    const upcoming = points[12]
+    expect(upcoming.month).toBe('2026-10')
+    expect(upcoming.isCurrentMonth).toBe(false)
+    expect(upcoming.isShowingNextMonth).toBe(true)
+    expect(upcoming.label).toBe("Oct '26")
+    expect(upcoming.fullMonth).toBe('October 2026')
+    expect(upcoming.total).toBe('500.00')
   })
 
-  it('keeps the current month while any expense is still unpaid', () => {
+  it('keeps 12 bars while any expense is still unpaid', () => {
     const points = toChartPoints(fixture({ all_paid: false, next_month_total: '500.00' }))
-    const last = points[11]
 
+    expect(points).toHaveLength(12)
+    const last = points[11]
     expect(last.isShowingNextMonth).toBe(false)
     expect(last.label).toBe("Sep '26")
     expect(last.fullMonth).toBe('September 2026')
     expect(last.total).toBe('100.00')
   })
 
-  it('keeps the current month when the next month total is missing', () => {
+  it('keeps 12 bars when the next month total is missing', () => {
     const points = toChartPoints(fixture({ all_paid: true }))
-    const last = points[11]
 
+    expect(points).toHaveLength(12)
+    const last = points[11]
     expect(last.isShowingNextMonth).toBe(false)
     expect(last.label).toBe("Sep '26")
     expect(last.total).toBe('100.00')
@@ -92,25 +103,31 @@ describe('toChartPoints', () => {
     vi.setSystemTime(december)
 
     const points = toChartPoints(fixture({ all_paid: true, next_month_total: '700.00' }, december))
-    const last = points[11]
 
-    expect(last.label).toBe("Jan '27")
-    expect(last.fullMonth).toBe('January 2027')
-    expect(last.total).toBe('700.00')
-    expect(last.month).toBe('2026-12')
+    expect(points).toHaveLength(13)
+    const current = points[11]
+    expect(current.month).toBe('2026-12')
+    expect(current.label).toBe("Dec '26")
+
+    const upcoming = points[12]
+    expect(upcoming.month).toBe('2027-01')
+    expect(upcoming.isShowingNextMonth).toBe(true)
+    expect(upcoming.label).toBe("Jan '27")
+    expect(upcoming.fullMonth).toBe('January 2027')
+    expect(upcoming.total).toBe('700.00')
   })
 })
 
 describe('MonthlyTotalsChart', () => {
-  it('renders the next month label once the current month is fully paid', () => {
+  it('renders the current and next month labels once the current month is fully paid', () => {
     render(<MonthlyTotalsChart data={fixture({ all_paid: true, next_month_total: '500.00' })} />)
 
     expect(screen.getByTestId('monthly-totals-chart')).toBeInTheDocument()
+    expect(screen.getByText("Sep '26")).toBeInTheDocument()
     expect(screen.getByText("Oct '26")).toBeInTheDocument()
-    expect(screen.queryByText("Sep '26")).not.toBeInTheDocument()
   })
 
-  it('renders the current month label while it is not fully paid', () => {
+  it('renders only the current month label while it is not fully paid', () => {
     render(<MonthlyTotalsChart data={fixture({ all_paid: false })} />)
 
     expect(screen.getByText("Sep '26")).toBeInTheDocument()

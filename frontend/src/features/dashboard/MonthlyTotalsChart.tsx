@@ -14,6 +14,7 @@ import type { MonthlyTotal } from './types'
 
 const CURRENT_MONTH_COLOR = '#3949ab'
 const PAST_MONTH_COLOR = '#c5cae9'
+const UPCOMING_MONTH_COLOR = '#9fa8da'
 
 interface MonthlyTotalsChartProps {
   data: MonthlyTotal[]
@@ -59,7 +60,16 @@ export function MonthlyTotalsChart({ data }: MonthlyTotalsChartProps) {
           <Tooltip content={<ChartTooltip />} cursor={{ fill: 'rgba(0, 0, 0, 0.04)' }} />
           <Bar dataKey="total" radius={[4, 4, 0, 0]}>
             {points.map((point) => (
-              <Cell key={point.month} fill={point.isCurrentMonth ? CURRENT_MONTH_COLOR : PAST_MONTH_COLOR} />
+              <Cell
+                key={point.month}
+                fill={
+                  point.isShowingNextMonth
+                    ? UPCOMING_MONTH_COLOR
+                    : point.isCurrentMonth
+                      ? CURRENT_MONTH_COLOR
+                      : PAST_MONTH_COLOR
+                }
+              />
             ))}
           </Bar>
         </BarChart>

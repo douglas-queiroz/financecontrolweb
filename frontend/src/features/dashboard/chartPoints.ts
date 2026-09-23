@@ -28,33 +28,49 @@ function currentMonthKey(): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 }
 
+function monthParts(key: string): [number, number] {
+  const [year, month] = key.split('-').map(Number)
+  return [year, month]
+}
+
+function nextMonthKey(monthKey: string): string {
+  const [year, month] = monthParts(monthKey)
+  const index = year * 12 + (month - 1) + 1
+  return `${Math.floor(index / 12)}-${String((index % 12) + 1).padStart(2, '0')}`
+}
+
+function labelsFor(monthKey: string): { label: string; fullMonth: string } {
+  const [year, month] = monthParts(monthKey)
+  const yearLabel = String(year)
+  return {
+    label: `${SHORT_MONTHS[month - 1]} '${yearLabel.slice(2)}`,
+    fullMonth: `${FULL_MONTHS[month - 1]} ${yearLabel}`,
+  }
+}
+
 export function toChartPoints(totals: MonthlyTotal[]): ChartPoint[] {
   const current = currentMonthKey()
-  return totals.map((total) => {
-    const [year, month] = total.month.split('-')
-    const monthNumber = Number(month)
+  const points = totals.map((total) => {
     const isCurrentMonth = total.month === current
-    // Once everything due this month is paid, the highlighted bar points at
-    // next month's literal rows instead of this month's (now settled) total.
-    const isShowingNextMonth =
-      isCurrentMonth && total.all_paid === true && total.next_month_total != null
-
-    let displayYear = Number(year)
-    let displayMonth = monthNumber
-    if (isShowingNextMonth) {
-      const nextIndex = displayYear * 12 + (displayMonth - 1) + 1
-      displayYear = Math.floor(nextIndex / 12)
-      displayMonth = (nextIndex % 12) + 1
-    }
-    const displayYearLabel = String(displayYear)
-
     return {
       ...total,
-      total: isShowingNextMonth && total.next_month_total != null ? total.next_month_total : total.total,
-      label: `${SHORT_MONTHS[displayMonth - 1]} '${displayYearLabel.slice(2)}`,
-      fullMonth: `${FULL_MONTHS[displayMonth - 1]} ${displayYearLabel}`,
+      ...labelsFor(total.month),
       isCurrentMonth,
-      isShowingNextMonth,
+      isShowingNextMonth: false,
     }
   })
+
+  const currentPoint = points.find((point) => point.month === current)
+  if (currentPoint && currentPoint.all_paid === true && currentPoint.next_month_total != null) {
+    const nextKey = nextMonthKey(current)
+    points.push({
+      ...currentPoint,
+      month: nextKey,
+      total: currentPoint.next_month_total,
+      ...labelsFor(nextKey),
+      isCurrentMonth: false,
+      isShowingNextMonth: true,
+    })
+  }
+  return points
 }
