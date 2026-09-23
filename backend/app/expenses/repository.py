@@ -146,4 +146,44 @@ class ExpenseRepository:
                     total=buckets.get((year, month_number), Decimal("0")),
                 )
             )
+
+        # The last bucket is always the current month (start_index is 11 months
+        # back from `today`). Enrich it with paid status so the chart can look
+        # ahead once nothing is left to pay this month.
+        current = totals[-1]
+        current_start = date(today.year, today.month, 1)
+
+        next_index = today.year * 12 + (today.month - 1) + 1
+        next_year, next_month = divmod(next_index, 12)
+        next_start = date(next_year, next_month + 1, 1)
+
+        after_next_index = next_index + 1
+        after_next_year, after_next_month = divmod(after_next_index, 12)
+        after_next_start = date(after_next_year, after_next_month + 1, 1)
+
+        current_rows = list(
+            self.db.scalars(
+                select(Expense).where(
+                    Expense.due_date >= current_start,
+                    Expense.due_date < next_start,
+                )
+            )
+        )
+        # Zero expenses due this month is vacuous truth: nothing left to pay.
+        current.all_paid = all(expense.paid_at is not None for expense in current_rows)
+
+        if current.all_paid:
+            next_rows = list(
+                self.db.scalars(
+                    select(Expense).where(
+                        Expense.due_date >= next_start,
+                        Expense.due_date < after_next_start,
+                    )
+                )
+            )
+            current.next_month_total = sum(
+                (expense.amount for expense in next_rows),
+                Decimal("0"),
+            )
+
         return totals

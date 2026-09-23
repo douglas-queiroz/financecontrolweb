@@ -48,10 +48,16 @@ class ExpenseUpdate(ExpenseBase):
 class MonthlyTotal(BaseModel):
     month: str
     total: Decimal
+    all_paid: bool | None = None
+    next_month_total: Decimal | None = None
 
     @field_serializer("total")
     def serialize_total(self, value: Decimal) -> str:
         return f"{value:.2f}"
+
+    @field_serializer("next_month_total")
+    def serialize_next_month_total(self, value: Decimal | None) -> str | None:
+        return f"{value:.2f}" if value is not None else None
 
 
 class ExpenseRead(BaseModel):

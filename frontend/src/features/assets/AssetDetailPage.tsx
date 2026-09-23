@@ -1,6 +1,12 @@
 import { useState } from 'react'
-import { useParams } from 'react-router-dom'
-import { useAssets, useAssetTransactions, useUpdateAssetValue } from '../../api/assets'
+import { useNavigate, useParams } from 'react-router-dom'
+import {
+  useAssets,
+  useAssetTransactions,
+  useDeleteAsset,
+  useUpdateAssetName,
+  useUpdateAssetValue,
+} from '../../api/assets'
 import { CurrencyInput } from '../../components/CurrencyInput'
 import { SkeletonRow } from '../../components/SkeletonRow'
 import { formatBRL } from '../../lib/currency'
@@ -9,14 +15,19 @@ import { BuySellForm } from './BuySellForm'
 
 export function AssetDetailPage() {
   const { id } = useParams()
+  const navigate = useNavigate()
   const { data: assets } = useAssets()
   const asset = assets?.find((a) => a.id === id)
   const { data: transactions, isLoading, error } = useAssetTransactions(id ?? '')
   const [showTransactionForm, setShowTransactionForm] = useState(false)
   const [showValueForm, setShowValueForm] = useState(false)
+  const [showEditForm, setShowEditForm] = useState(false)
+  const [editName, setEditName] = useState('')
   const [valuePrice, setValuePrice] = useState('0.00')
   const [valueDate, setValueDate] = useState('')
   const updateValue = useUpdateAssetValue(id ?? '')
+  const updateName = useUpdateAssetName()
+  const deleteAsset = useDeleteAsset()
 
   if (!asset) {
     return (
@@ -27,6 +38,12 @@ export function AssetDetailPage() {
   }
 
   const unitCurrencyLabel = asset.category === 'bitcoin' ? 'BRL' : asset.currency
+
+  const onDelete = () => {
+    if (window.confirm('Delete this asset?')) {
+      deleteAsset.mutate(asset.id, { onSuccess: () => navigate('/assets') })
+    }
+  }
 
   return (
     <div className="mx-auto max-w-2xl space-y-4 px-4 py-6">
@@ -58,8 +75,55 @@ export function AssetDetailPage() {
               Update value
             </button>
           )}
+          <button
+            type="button"
+            onClick={() => {
+              setEditName(asset.name)
+              setShowEditForm((v) => !v)
+            }}
+            className="rounded-lg bg-gray-200 px-4 py-2 font-medium text-gray-700"
+          >
+            Edit
+          </button>
+          <button
+            type="button"
+            onClick={onDelete}
+            className="rounded-lg px-4 py-2 font-medium text-danger-600"
+          >
+            Delete
+          </button>
         </div>
       </div>
+
+      {showEditForm && (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            updateName.mutate(
+              { id: asset.id, name: editName.trim() },
+              { onSuccess: () => setShowEditForm(false) },
+            )
+          }}
+          className="space-y-4 rounded-lg bg-surface-variant p-4"
+        >
+          <label className="block">
+            <span className="mb-1 block text-sm font-medium text-gray-700">Name</span>
+            <input
+              type="text"
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              className="w-full rounded-lg border border-gray-300 bg-surface px-3 py-2"
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={editName.trim().length === 0}
+            className="w-full rounded-lg bg-primary-600 py-3 font-medium text-white disabled:pointer-events-none disabled:opacity-50"
+          >
+            Save
+          </button>
+        </form>
+      )}
 
       {showTransactionForm && (
         <BuySellForm asset={asset} onDone={() => setShowTransactionForm(false)} />

@@ -9,32 +9,11 @@ import {
   YAxis,
 } from 'recharts'
 import { formatBRL } from '../../lib/currency'
+import { toChartPoints, type ChartPoint } from './chartPoints'
 import type { MonthlyTotal } from './types'
-
-const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-const FULL_MONTHS = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-]
 
 const CURRENT_MONTH_COLOR = '#3949ab'
 const PAST_MONTH_COLOR = '#c5cae9'
-
-interface ChartPoint extends MonthlyTotal {
-  label: string
-  fullMonth: string
-  isCurrentMonth: boolean
-}
 
 interface MonthlyTotalsChartProps {
   data: MonthlyTotal[]
@@ -49,31 +28,15 @@ interface ChartTooltipProps {
   payload?: TooltipEntry[]
 }
 
-function currentMonthKey(): string {
-  const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-}
-
-function toChartPoints(totals: MonthlyTotal[]): ChartPoint[] {
-  const current = currentMonthKey()
-  return totals.map((total) => {
-    const [year, month] = total.month.split('-')
-    const monthNumber = Number(month)
-    return {
-      ...total,
-      label: `${SHORT_MONTHS[monthNumber - 1]} '${year.slice(2)}`,
-      fullMonth: `${FULL_MONTHS[monthNumber - 1]} ${year}`,
-      isCurrentMonth: total.month === current,
-    }
-  })
-}
-
 function ChartTooltip({ active, payload }: ChartTooltipProps) {
   if (!active || !payload || payload.length === 0) return null
   const point = payload[0].payload
   return (
     <div className="rounded-lg bg-surface p-3 text-sm shadow-elevation-2">
-      <p className="font-medium text-gray-900">{point.fullMonth}</p>
+      <p className="font-medium text-gray-900">
+        {point.fullMonth}
+        {point.isShowingNextMonth && <span className="text-gray-500"> (upcoming)</span>}
+      </p>
       <p className="text-gray-600">{formatBRL(point.total)}</p>
     </div>
   )

@@ -186,3 +186,69 @@ def test_fetch_monthly_totals_includes_paid_expenses(db_session):
 
     assert totals[-1].month == "2026-09"
     assert totals[-1].total == Decimal("77.00")
+
+
+def test_fetch_monthly_totals_fully_paid_current_month_reports_next_month_total(db_session):
+    repo = ExpenseRepository(db_session)
+    paid = repo.create(make_input(description="Paid", due_date=date(2026, 9, 5)))
+    repo.mark_as_paid(paid.id, datetime(2026, 9, 5, tzinfo=timezone.utc))
+    # Literal rows in next month, regardless of paid status.
+    repo.create(make_input(description="Next A", amount=Decimal("100.00"), due_date=date(2026, 10, 1)))
+    repo.create(make_input(description="Next B", amount=Decimal("50.25"), due_date=date(2026, 10, 20)))
+    # Two months out must not be counted.
+    repo.create(make_input(description="Later", amount=Decimal("999.00"), due_date=date(2026, 11, 1)))
+
+    totals = repo.fetch_monthly_totals(date(2026, 9, 15))
+
+    assert totals[-1].all_paid is True
+    assert totals[-1].next_month_total == Decimal("150.25")
+
+
+def test_fetch_monthly_totals_partially_paid_current_month_has_no_next_month_total(db_session):
+    repo = ExpenseRepository(db_session)
+    paid = repo.create(make_input(description="Paid", due_date=date(2026, 9, 5)))
+    repo.mark_as_paid(paid.id, datetime(2026, 9, 5, tzinfo=timezone.utc))
+    repo.create(make_input(description="Unpaid", due_date=date(2026, 9, 10)))
+    repo.create(make_input(description="Next", amount=Decimal("100.00"), due_date=date(2026, 10, 1)))
+
+    totals = repo.fetch_monthly_totals(date(2026, 9, 15))
+
+    assert totals[-1].all_paid is False
+    assert totals[-1].next_month_total is None
+
+
+def test_fetch_monthly_totals_empty_current_month_is_vacuously_paid(db_session):
+    repo = ExpenseRepository(db_session)
+    repo.create(make_input(description="Next", amount=Decimal("42.00"), due_date=date(2026, 10, 1)))
+
+    totals = repo.fetch_monthly_totals(date(2026, 9, 15))
+
+    assert totals[-1].total == Decimal("0")
+    assert totals[-1].all_paid is True
+    assert totals[-1].next_month_total == Decimal("42.00")
+
+
+def test_fetch_monthly_totals_only_current_month_bucket_is_enriched(db_session):
+    repo = ExpenseRepository(db_session)
+    expense = repo.create(make_input(due_date=date(2026, 9, 5)))
+    repo.mark_as_paid(expense.id, datetime(2026, 9, 5, tzinfo=timezone.utc))
+
+    totals = repo.fetch_monthly_totals(date(2026, 9, 15))
+
+    for bucket in totals[:-1]:
+        assert bucket.all_paid is None
+        assert bucket.next_month_total is None
+    assert totals[-1].all_paid is True
+
+
+def test_fetch_monthly_totals_next_month_wraps_over_year_boundary(db_session):
+    repo = ExpenseRepository(db_session)
+    expense = repo.create(make_input(due_date=date(2026, 12, 5)))
+    repo.mark_as_paid(expense.id, datetime(2026, 12, 5, tzinfo=timezone.utc))
+    repo.create(make_input(description="January rent", amount=Decimal("80.00"), due_date=date(2027, 1, 10)))
+
+    totals = repo.fetch_monthly_totals(date(2026, 12, 15))
+
+    assert totals[-1].month == "2026-12"
+    assert totals[-1].all_paid is True
+    assert totals[-1].next_month_total == Decimal("80.00")

@@ -58,4 +58,34 @@ describe('ExpensesList', () => {
 
     expect(screen.getByText(/no expenses this month/i)).toBeInTheDocument()
   })
+
+  it('shows a month summary with total, paid, and remaining', () => {
+    mockExpenses([
+      { id: '1', description: 'Paid bill', amount: '100.00', due_date: '2026-01-05', paid_at: '2026-01-05T00:00:00Z' },
+      { id: '2', description: 'Unpaid bill', amount: '250.50', due_date: '2026-01-10', paid_at: null },
+    ])
+
+    render(
+      <MemoryRouter>
+        <ExpensesList year={2026} month={1} />
+      </MemoryRouter>,
+    )
+
+    const summary = screen.getByTestId('expenses-summary')
+    expect(summary).toHaveTextContent('350,50') // total
+    expect(summary).toHaveTextContent('100,00') // paid
+    expect(summary).toHaveTextContent('250,50') // remaining
+  })
+
+  it('hides the summary when the month has no expenses', () => {
+    mockExpenses([])
+
+    render(
+      <MemoryRouter>
+        <ExpensesList year={2026} month={1} />
+      </MemoryRouter>,
+    )
+
+    expect(screen.queryByTestId('expenses-summary')).not.toBeInTheDocument()
+  })
 })
