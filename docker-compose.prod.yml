@@ -1,0 +1,44 @@
+# Production deployment: single container serving API + built frontend.
+#
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# `restart: unless-stopped` plus an enabled Docker daemon makes the app
+# start automatically when the OS boots.
+#
+# Optional API keys are read from a `.env` file in this directory
+# (see .env.example).
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    ports:
+      # App on http://localhost/ (frontend + API), 8000 kept for convenience.
+      - "80:8000"
+      - "8000:8000"
+    volumes:
+      - backend-data:/app/data
+    environment:
+      DATABASE_URL: sqlite:////app/data/financecontrol.db
+      # Frontend is served from the same origin, so no cross-origin grants.
+      CORS_ORIGINS: ${CORS_ORIGINS:-[]}
+      BRAPI_API_TOKEN: ${BRAPI_API_TOKEN:-}
+      COINGECKO_API_KEY: ${COINGECKO_API_KEY:-}
+      TWELVE_DATA_API_KEY: ${TWELVE_DATA_API_KEY:-}
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  backend-data:
