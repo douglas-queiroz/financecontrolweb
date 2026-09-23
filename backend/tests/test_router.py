@@ -204,6 +204,30 @@ def test_monthly_totals_sums_due_amounts(client):
     assert all(entry["total"] == "0.00" for entry in body[1:])
 
 
+def test_monthly_totals_serializes_paid_flags_and_next_month_total(client):
+    today = date.today()
+    current_due = f"{today.year}-{today.month:02d}-05"
+    next_year, next_month = shift_months(today.year, today.month, 1)
+    next_due = f"{next_year}-{next_month + 1:02d}-10"
+
+    created = client.post(
+        "/api/expenses", json={"description": "Rent", "amount": "100.00", "due_date": current_due}
+    ).json()
+    client.post(f"/api/expenses/{created['id']}/mark-paid")
+    client.post(
+        "/api/expenses", json={"description": "Next", "amount": "55.50", "due_date": next_due}
+    )
+
+    response = client.get("/api/expenses/monthly-totals")
+    assert response.status_code == 200
+    body = response.json()
+
+    assert body[-1]["all_paid"] is True
+    assert body[-1]["next_month_total"] == "55.50"
+    assert all(entry["all_paid"] is None for entry in body[:-1])
+    assert all(entry["next_month_total"] is None for entry in body[:-1])
+
+
 def test_manual_pricing_refresh_runs_the_job(client, monkeypatch):
     from app.pricing import router as pricing_router
 

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
@@ -31,14 +31,20 @@ function renderDetail(id: string, asset: Asset) {
   } as never)
   vi.mocked(assetsApi.useCreateAssetTransaction).mockReturnValue({ mutate: vi.fn() } as never)
   vi.mocked(assetsApi.useUpdateAssetValue).mockReturnValue({ mutate: vi.fn() } as never)
+  const updateName = { mutate: vi.fn() }
+  const deleteAsset = { mutate: vi.fn() }
+  vi.mocked(assetsApi.useUpdateAssetName).mockReturnValue(updateName as never)
+  vi.mocked(assetsApi.useDeleteAsset).mockReturnValue(deleteAsset as never)
 
-  return render(
+  const view = render(
     <MemoryRouter initialEntries={[`/assets/${id}`]}>
       <Routes>
         <Route path="/assets/:id" element={<AssetDetailPage />} />
+        <Route path="/assets" element={<p>Assets home</p>} />
       </Routes>
     </MemoryRouter>,
   )
+  return { ...view, updateName, deleteAsset }
 }
 
 describe('AssetDetailPage', () => {
@@ -64,5 +70,75 @@ describe('AssetDetailPage', () => {
   it('hides the Update value action for non-bonds', () => {
     renderDetail('1', STOCK)
     expect(screen.queryByRole('button', { name: 'Update value' })).not.toBeInTheDocument()
+  })
+
+  it('reveals a rename form pre-filled with the current name and saves via the mutation', async () => {
+    const { updateName } = renderDetail('1', STOCK)
+    expect(screen.queryByLabelText('Name')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }))
+
+    const input = screen.getByLabelText('Name')
+    expect(input).toHaveValue('PETR4')
+
+    await userEvent.clear(input)
+    await userEvent.type(input, 'PETR4 renamed')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(updateName.mutate).toHaveBeenCalledWith(
+      { id: '1', name: 'PETR4 renamed' },
+      expect.objectContaining({ onSuccess: expect.any(Function) }),
+    )
+  })
+
+  it('hides the rename form after a successful save', async () => {
+    const { updateName } = renderDetail('1', STOCK)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    const options = updateName.mutate.mock.calls[0][1]
+    act(() => options.onSuccess())
+
+    expect(screen.queryByLabelText('Name')).not.toBeInTheDocument()
+  })
+
+  it('disables saving when the name is emptied', async () => {
+    renderDetail('1', STOCK)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    await userEvent.clear(screen.getByLabelText('Name'))
+
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+  })
+
+  it('deletes the asset after confirmation and navigates to the assets list', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const { deleteAsset } = renderDetail('1', STOCK)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+
+    expect(confirmSpy).toHaveBeenCalledWith('Delete this asset?')
+    expect(deleteAsset.mutate).toHaveBeenCalledWith(
+      '1',
+      expect.objectContaining({ onSuccess: expect.any(Function) }),
+    )
+
+    const options = deleteAsset.mutate.mock.calls[0][1]
+    act(() => options.onSuccess())
+
+    expect(await screen.findByText('Assets home')).toBeInTheDocument()
+    confirmSpy.mockRestore()
+  })
+
+  it('does not delete when the confirmation is declined', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const { deleteAsset } = renderDetail('1', STOCK)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+
+    expect(deleteAsset.mutate).not.toHaveBeenCalled()
+    expect(screen.getByText('PETR4')).toBeInTheDocument()
+    confirmSpy.mockRestore()
   })
 })

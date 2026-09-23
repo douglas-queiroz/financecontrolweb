@@ -3,8 +3,17 @@ from decimal import Decimal
 from uuid import UUID
 
 import pytest
+from sqlalchemy import select
 
-from app.assets.models import Asset, AssetCategory, Currency, TransactionType
+from app.assets.models import (
+    BTC_CURRENCY_CODE,
+    Asset,
+    AssetCategory,
+    Currency,
+    FxRateHistory,
+    TransactionType,
+    ValueSource,
+)
 from app.assets.repository import (
     AssetNotFoundError,
     AssetRepository,
@@ -31,6 +40,19 @@ def _bond_input(**overrides):
     )
     defaults.update(overrides)
     return AssetCreate(**defaults)
+
+
+def _bitcoin_input(**overrides):
+    defaults = dict(
+        name="Bitcoin", category=AssetCategory.bitcoin, code=None, currency=None,
+        quantity=Decimal("0.5"), unit_price=Decimal("250000.00"), date=date(2026, 1, 1),
+    )
+    defaults.update(overrides)
+    return AssetCreate(**defaults)
+
+
+def _fx_rows(db, currency):
+    return list(db.scalars(select(FxRateHistory).where(FxRateHistory.currency == currency)))
 
 
 def test_create_brl_stock_sets_average_cost(db_session):
@@ -261,3 +283,92 @@ def test_monthly_totals_uses_latest_price_as_of_each_month(db_session):
     assert totals[9].total == Decimal("1050.00")
     assert totals[10].total == Decimal("1050.00")
     assert totals[11].total == Decimal("1050.00")
+
+
+def _buy(repo, asset_id, quantity, unit_price, on_date):
+    return repo.create_transaction(
+        asset_id,
+        AssetTransactionCreate(
+            type=TransactionType.buy,
+            quantity=quantity,
+            unit_price=unit_price,
+            date=on_date,
+        ),
+    )
+
+
+def test_bitcoin_current_value_prefers_market_rate_over_newer_manual_row(db_session):
+    repo = AssetRepository(db_session)
+    asset = repo.create_asset(_bitcoin_input())  # manual BTC rate: 250000 @ 2026-01-01
+    repo.record_market_fx_rate(BTC_CURRENCY_CODE, Decimal("400000.00"), date(2026, 1, 5))
+    # A later buy writes a manual bridging row dated after the market rate,
+    # exactly like a typed-in price shadowing the daily job's data.
+    _buy(repo, asset.id, Decimal("0.1"), Decimal("161952.50"), date(2026, 1, 10))
+
+    refreshed = next(a for a in repo.list_assets() if a.id == asset.id)
+
+    assert refreshed.current_value_brl == Decimal("240000.00")  # 0.6 * 400000 (market), not 161952.50
+
+
+def test_bitcoin_value_falls_back_to_manual_rate_before_market_data_exists(db_session):
+    repo = AssetRepository(db_session)
+    asset = repo.create_asset(
+        _bitcoin_input(quantity=Decimal("0.01"), unit_price=Decimal("250000.00"))
+    )
+
+    refreshed = next(a for a in repo.list_assets() if a.id == asset.id)
+
+    assert refreshed.current_value_brl == Decimal("2500.00")  # bridging still works
+
+
+def test_market_fx_rate_replaces_same_day_manual_row(db_session):
+    repo = AssetRepository(db_session)
+    repo.create_asset(_bitcoin_input(unit_price=Decimal("161952.50"), date=date(2026, 1, 1)))
+
+    repo.record_market_fx_rate(BTC_CURRENCY_CODE, Decimal("442060.00"), date(2026, 1, 1))
+    repo.record_market_fx_rate(BTC_CURRENCY_CODE, Decimal("443000.00"), date(2026, 1, 1))
+
+    rows = _fx_rows(db_session, BTC_CURRENCY_CODE)
+    assert len(rows) == 1  # manual row replaced, second market write stays idempotent
+    assert rows[0].source == ValueSource.market.value
+    assert rows[0].rate_to_brl == Decimal("442060.00")
+
+
+def test_monthly_totals_prefer_market_rate_over_newer_manual_row(db_session):
+    repo = AssetRepository(db_session)
+    asset = repo.create_asset(_bitcoin_input(date=date(2026, 9, 1)))
+    repo.record_market_fx_rate(BTC_CURRENCY_CODE, Decimal("400000.00"), date(2026, 9, 5))
+    _buy(repo, asset.id, Decimal("0.1"), Decimal("161952.50"), date(2026, 9, 10))
+
+    totals = repo.fetch_monthly_totals(date(2026, 9, 15))
+
+    assert totals[-1].month == "2026-09"
+    assert totals[-1].total == Decimal("240000.00")  # 0.6 * 400000 (market as of month end)
+
+
+def test_delete_bitcoin_asset_removes_manual_fx_rows_but_keeps_market(db_session):
+    repo = AssetRepository(db_session)
+    asset = repo.create_asset(_bitcoin_input(date=date(2026, 1, 1)))
+    repo.record_market_fx_rate(BTC_CURRENCY_CODE, Decimal("400000.00"), date(2026, 1, 5))
+
+    repo.delete_asset(asset.id)
+
+    rows = _fx_rows(db_session, BTC_CURRENCY_CODE)
+    assert [row.source for row in rows] == [ValueSource.market.value]
+    assert rows[0].rate_to_brl == Decimal("400000.00")
+
+
+def test_delete_usd_asset_removes_manual_fx_bridge_but_keeps_market(db_session):
+    repo = AssetRepository(db_session)
+    asset = repo.create_asset(
+        _stock_input(
+            name="AAPL", code="AAPL", currency=Currency.USD, unit_price=Decimal("150.00"),
+            fx_rate_to_brl=Decimal("5.00"), date=date(2026, 1, 1),
+        )
+    )
+    repo.record_market_fx_rate("USD", Decimal("5.30"), date(2026, 1, 2))
+
+    repo.delete_asset(asset.id)
+
+    rows = _fx_rows(db_session, "USD")
+    assert [row.source for row in rows] == [ValueSource.market.value]
