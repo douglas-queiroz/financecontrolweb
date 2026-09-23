@@ -3,7 +3,7 @@ from calendar import monthrange
 from datetime import date as date_type
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.assets.models import (
@@ -73,11 +73,28 @@ class AssetRepository:
         return self.db.scalar(stmt)
 
     def _latest_fx_rate(self, currency: str, as_of: date_type | None = None) -> Decimal | None:
+        """Latest rate on record for `currency`, preferring market-sourced rows.
+
+        Manual rows are bridging data written from buy/sell transactions — they
+        hold whatever number the user typed as the "price", so they can be stale
+        or simply wrong (and, being dated at the transaction date, can end up
+        newer than the most recent rate the daily job recorded). A manual row
+        must never shadow market data: use the newest market rate when one
+        exists, and fall back to the newest manual rate only while the job
+        hasn't recorded anything yet (or never ran).
+        """
         stmt = select(FxRateHistory.rate_to_brl).where(FxRateHistory.currency == currency)
         if as_of is not None:
             stmt = stmt.where(FxRateHistory.date <= as_of)
-        stmt = stmt.order_by(FxRateHistory.date.desc(), FxRateHistory.created_at.desc()).limit(1)
-        return self.db.scalar(stmt)
+        stmt = stmt.order_by(FxRateHistory.date.desc(), FxRateHistory.created_at.desc())
+        market = self.db.scalar(
+            stmt.where(FxRateHistory.source == ValueSource.market.value).limit(1)
+        )
+        if market is not None:
+            return market
+        return self.db.scalar(
+            stmt.where(FxRateHistory.source == ValueSource.manual.value).limit(1)
+        )
 
     def _upsert_manual_fx_rate(self, currency: str, on_date: date_type, rate: Decimal) -> None:
         exists = self.db.scalar(
@@ -297,22 +314,29 @@ class AssetRepository:
         )
 
     def record_market_fx_rate(self, currency: str, rate: Decimal, on_date: date_type) -> None:
-        exists = self.db.scalar(
-            select(FxRateHistory.id).where(
+        existing = self.db.scalar(
+            select(FxRateHistory).where(
                 FxRateHistory.currency == currency, FxRateHistory.date == on_date
             )
         )
-        if exists is not None:
-            return
-        self.db.add(
-            FxRateHistory(
-                id=uuid.uuid4(),
-                currency=currency,
-                rate_to_brl=rate,
-                date=on_date,
-source=ValueSource.market.value,
+        if existing is None:
+            self.db.add(
+                FxRateHistory(
+                    id=uuid.uuid4(),
+                    currency=currency,
+                    rate_to_brl=rate,
+                    date=on_date,
+                    source=ValueSource.market.value,
+                )
             )
-        )
+            return
+        if existing.source == ValueSource.market.value:
+            return
+        # A manual bridging row (written from a buy/sell that day) loses to the
+        # daily job's real market rate: market data is authoritative for a date,
+        # otherwise a typed-in price would lock out that day's actual rate.
+        existing.rate_to_brl = rate
+        existing.source = ValueSource.market.value
 
     def latest_market_price(self) -> date_type | None:
         return self.db.scalar(
@@ -339,8 +363,51 @@ source=ValueSource.market.value,
 
     def delete_asset(self, asset_id: uuid.UUID) -> None:
         asset = self._get(asset_id)
+        transactions = list(
+            self.db.scalars(
+                select(AssetTransaction).where(AssetTransaction.asset_id == asset_id)
+            )
+        )
+        self._drop_manual_fx_bridges(asset, transactions)
         self.db.delete(asset)
         self.db.commit()
+
+    def _drop_manual_fx_bridges(
+        self, asset: Asset, transactions: list[AssetTransaction]
+    ) -> None:
+        """Delete manual FX rows written by this asset's buy/sell transactions.
+
+        `fx_rate_history` is keyed by (currency, date) with no asset link —
+        rates are shared — so a bridging row written from a transaction would
+        otherwise outlive a deleted (or deleted-and-recreated) asset and keep
+        feeding its typed-in "rate" to every valuation. Market rows are never
+        touched; for bitcoin the row's rate must also match one of this asset's
+        transaction prices, since another bitcoin transaction on the same day
+        would have written a different rate that we don't own.
+        """
+        if asset.category == AssetCategory.bitcoin.value:
+            currency = BTC_CURRENCY_CODE
+            rates: list[Decimal] = [t.unit_price for t in transactions]
+        elif asset.currency in (Currency.USD.value, Currency.EUR.value):
+            currency = asset.currency
+            # The FX rate a transaction resolved to isn't stored on the row, so
+            # for USD/EUR the transaction date is the only ownership signal.
+            rates = []
+        else:
+            return
+
+        dates = [t.date for t in transactions]
+        if not dates:
+            return
+
+        conditions = [
+            FxRateHistory.currency == currency,
+            FxRateHistory.date.in_(dates),
+            FxRateHistory.source == ValueSource.manual.value,
+        ]
+        if rates:
+            conditions.append(FxRateHistory.rate_to_brl.in_(rates))
+        self.db.execute(delete(FxRateHistory).where(*conditions))
 
     def list_transactions(self, asset_id: uuid.UUID) -> list[AssetTransactionRead]:
         self._get(asset_id)
